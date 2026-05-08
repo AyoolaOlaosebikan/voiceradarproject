@@ -1,0 +1,28 @@
+# Embeddings and model weights — too large for GitHub
+embeddings/
+*.pt
+*.npz
+*.npy
+
+# Test audio files
+*.mp3
+*.wav
+*.flac
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+
+# Notes (personal implementation log)
+notes/
+
+# VSCode
+*.code-workspace
+.vscode/
+
+# macOS
+.DS_Store
