@@ -7,7 +7,7 @@ A reproduction of **VoiceRadar: Detecting AI-Generated Speech via Micro-Frequenc
 > Kumari, N., et al. "VoiceRadar: Detecting AI-Generated Speech via Micro-Frequency Analysis and Doppler Effect."
 > *Network and Distributed System Security Symposium (NDSS)*, 2025.
 
-This repository is an independent reproduction of the paper's four-stage pipeline for a university honors project. The original authors did not release code.
+This repository is an independent reproduction of the paper's four-stage pipeline. The original authors did not release code.
 
 ## Pipeline
 
