@@ -18,10 +18,19 @@ This repository is an independent reproduction of the paper's four-stage pipelin
 
 ## Results
 
+**ASVspoof-only model** (trained on ASVspoof 2019 LA train, 5K samples):
+
 | Dataset | Accuracy | TPR | TNR | EER |
 |---|---|---|---|---|
 | ASVspoof 2019 LA eval (unseen attacks) | 0.865 | 0.997 | 0.733 | — |
 | In-the-Wild (Muller et al. 2022) | 0.614 | 0.292 | 0.936 | 38.6% |
+
+**Combined model** (trained on ASVspoof 2019 LA train + In-the-Wild, ~13.5K samples):
+
+| Dataset | Accuracy | TPR | TNR | EER |
+|---|---|---|---|---|
+| ASVspoof 2019 LA eval (unseen attacks) | 0.800 | 0.999 | 0.601 | — |
+| In-the-Wild (Muller et al. 2022) | 0.913 | 0.957 | 0.869 | 8.7% |
 
 Paper reports EER 0.10% on ASVspoof 2019 using `hubert-large` and the full dataset. We use `hubert-base` (768-dim vs 1024-dim) and a 5K subsample due to M2 MacBook hardware constraints.
 

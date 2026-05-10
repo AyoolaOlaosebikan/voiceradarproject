@@ -126,107 +126,85 @@ def voiceradar_loss(
 # Data
 # ---------------------------------------------------------------------------
 
-print("Loading datasets...")
-asv_train_ds = VoiceDataset("train")
-dev_ds       = VoiceDataset("dev")
-eval_ds      = VoiceDataset("eval")
+if __name__ == "__main__":
+    print("Loading datasets...")
+    asv_train_ds = VoiceDataset("train")
+    dev_ds       = VoiceDataset("dev")
+    eval_ds      = VoiceDataset("eval")
 
-itw_path = EMB_ROOT / "itw_fo.npz"
-if USE_COMBINED_TRAINING and itw_path.exists():
-    itw_ds   = VoiceDataset("itw")
-    train_ds = ConcatDataset([asv_train_ds, itw_ds])
-    print(f"  Combined train: {len(train_ds)} samples "
-          f"(ASVspoof {len(asv_train_ds)} + ITW {len(itw_ds)})")
-else:
-    train_ds = asv_train_ds
-    if USE_COMBINED_TRAINING:
-        print("  itw_fo.npz not found — training on ASVspoof only")
+    itw_path = EMB_ROOT / "itw_fo.npz"
+    if USE_COMBINED_TRAINING and itw_path.exists():
+        itw_ds   = VoiceDataset("itw")
+        train_ds = ConcatDataset([asv_train_ds, itw_ds])
+        print(f"  Combined train: {len(train_ds)} samples "
+              f"(ASVspoof {len(asv_train_ds)} + ITW {len(itw_ds)})")
+    else:
+        train_ds = asv_train_ds
+        if USE_COMBINED_TRAINING:
+            print("  itw_fo.npz not found — training on ASVspoof only")
 
-train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=0)
-dev_loader   = DataLoader(dev_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
-eval_loader  = DataLoader(eval_ds,  batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=0)
+    dev_loader   = DataLoader(dev_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+    eval_loader  = DataLoader(eval_ds,  batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
 
-# ---------------------------------------------------------------------------
-# Training
-# ---------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
+    # Training
+    # -------------------------------------------------------------------------
 
-model     = VoiceRadarMLP(input_dim=768).to(DEVICE)
-optimizer = torch.optim.Adam(model.parameters(), lr=LR)
+    model     = VoiceRadarMLP(input_dim=768).to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=LR)
 
-best_dev_acc = 0.0
+    best_dev_acc = 0.0
 
-for epoch in range(1, EPOCHS + 1):
-    # --- train ---
-    model.train()
-    train_loss = 0.0
-    for emb, label, fo_true, fs, variance in train_loader:
-        emb, label = emb.to(DEVICE), label.to(DEVICE)
-        fo_true    = fo_true.to(DEVICE)
-        fs         = fs.to(DEVICE)
-        variance   = variance.to(DEVICE)
-
-        pred = model(emb)
-        loss = voiceradar_loss(pred, label, fo_true, fs, variance)
-
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        train_loss += loss.item()
-
-    train_loss /= len(train_loader)
-
-    # --- eval ---
-    model.eval()
-    correct = 0
-    total   = 0
-    with torch.no_grad():
-        for emb, label, fo_true, fs, variance in dev_loader:
+    for epoch in range(1, EPOCHS + 1):
+        # --- train ---
+        model.train()
+        train_loss = 0.0
+        for emb, label, fo_true, fs, variance in train_loader:
             emb, label = emb.to(DEVICE), label.to(DEVICE)
+            fo_true    = fo_true.to(DEVICE)
+            fs         = fs.to(DEVICE)
+            variance   = variance.to(DEVICE)
+
             pred = model(emb)
-            predicted = (pred >= 0.5).float()
-            correct += (predicted == label).sum().item()
-            total   += label.size(0)
+            loss = voiceradar_loss(pred, label, fo_true, fs, variance)
 
-    dev_acc = correct / total
-    if dev_acc > best_dev_acc:
-        best_dev_acc = dev_acc
-        torch.save(model.state_dict(), "voiceradar_best.pt")
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item()
 
-    print(f"Epoch {epoch:2d}/{EPOCHS}  loss={train_loss:.4f}  dev_acc={dev_acc:.4f}  best={best_dev_acc:.4f}")
+        train_loss /= len(train_loader)
 
-print(f"\nTraining complete. Best dev accuracy: {best_dev_acc:.4f}")
+        # --- dev eval ---
+        model.eval()
+        correct = 0
+        total   = 0
+        with torch.no_grad():
+            for emb, label, fo_true, fs, variance in dev_loader:
+                emb, label = emb.to(DEVICE), label.to(DEVICE)
+                pred = model(emb)
+                predicted = (pred >= 0.5).float()
+                correct += (predicted == label).sum().item()
+                total   += label.size(0)
 
-# --- final eval on held-out eval split (unseen attack types) ---
-print("\nEvaluating on eval split (unseen attack types)...")
-model.load_state_dict(torch.load("voiceradar_best.pt", map_location=DEVICE))
-model.eval()
+        dev_acc = correct / total
+        if dev_acc > best_dev_acc:
+            best_dev_acc = dev_acc
+            torch.save(model.state_dict(), "voiceradar_best.pt")
 
-correct = total = tp = fp = tn = fn = 0
-with torch.no_grad():
-    for emb, label, fo_true, fs, variance in eval_loader:
-        emb, label = emb.to(DEVICE), label.to(DEVICE)
-        pred = model(emb)
-        predicted = (pred >= 0.5).float()
-        correct += (predicted == label).sum().item()
-        total   += label.size(0)
-        tp += ((predicted == 1) & (label == 1)).sum().item()
-        fp += ((predicted == 1) & (label == 0)).sum().item()
-        tn += ((predicted == 0) & (label == 0)).sum().item()
-        fn += ((predicted == 0) & (label == 1)).sum().item()
+        print(f"Epoch {epoch:2d}/{EPOCHS}  loss={train_loss:.4f}  dev_acc={dev_acc:.4f}  best={best_dev_acc:.4f}")
 
-tpr = tp / (tp + fn) if (tp + fn) > 0 else 0
-tnr = tn / (tn + fp) if (tn + fp) > 0 else 0
-print(f"  Eval accuracy: {correct/total:.4f}  ({correct}/{total})")
-print(f"  TPR (bonafide detected): {tpr:.4f}")
-print(f"  TNR (spoof detected):    {tnr:.4f}")
+    print(f"\nTraining complete. Best dev accuracy: {best_dev_acc:.4f}")
 
-# --- out-of-domain eval on In-the-Wild (if available) ---
-if itw_path.exists():
-    print("\nEvaluating on In-the-Wild (out-of-domain)...")
-    itw_loader = DataLoader(VoiceDataset("itw"), batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+    # --- final eval on held-out eval split (unseen attack types) ---
+    print("\nEvaluating on eval split (unseen attack types)...")
+    model.load_state_dict(torch.load("voiceradar_best.pt", map_location=DEVICE))
+    model.eval()
+
     correct = total = tp = fp = tn = fn = 0
     with torch.no_grad():
-        for emb, label, fo_true, fs, variance in itw_loader:
+        for emb, label, fo_true, fs, variance in eval_loader:
             emb, label = emb.to(DEVICE), label.to(DEVICE)
             pred = model(emb)
             predicted = (pred >= 0.5).float()
@@ -236,12 +214,35 @@ if itw_path.exists():
             fp += ((predicted == 1) & (label == 0)).sum().item()
             tn += ((predicted == 0) & (label == 0)).sum().item()
             fn += ((predicted == 0) & (label == 1)).sum().item()
-    tpr_itw = tp / (tp + fn) if (tp + fn) > 0 else 0
-    tnr_itw = tn / (tn + fp) if (tn + fp) > 0 else 0
-    fpr_itw = 1 - tnr_itw
-    fnr_itw = 1 - tpr_itw
-    eer_itw = (fpr_itw + fnr_itw) / 2
-    print(f"  ITW accuracy: {correct/total:.4f}  ({correct}/{total})")
-    print(f"  TPR (bonafide): {tpr_itw:.4f}")
-    print(f"  TNR (spoof):    {tnr_itw:.4f}")
-    print(f"  EER (approx):   {eer_itw*100:.1f}%  (baseline: 38.6% ASVspoof-only)")
+
+    tpr = tp / (tp + fn) if (tp + fn) > 0 else 0
+    tnr = tn / (tn + fp) if (tn + fp) > 0 else 0
+    print(f"  Eval accuracy: {correct/total:.4f}  ({correct}/{total})")
+    print(f"  TPR (bonafide detected): {tpr:.4f}")
+    print(f"  TNR (spoof detected):    {tnr:.4f}")
+
+    # --- out-of-domain eval on In-the-Wild (if available) ---
+    if itw_path.exists():
+        print("\nEvaluating on In-the-Wild (out-of-domain)...")
+        itw_loader = DataLoader(VoiceDataset("itw"), batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+        correct = total = tp = fp = tn = fn = 0
+        with torch.no_grad():
+            for emb, label, fo_true, fs, variance in itw_loader:
+                emb, label = emb.to(DEVICE), label.to(DEVICE)
+                pred = model(emb)
+                predicted = (pred >= 0.5).float()
+                correct += (predicted == label).sum().item()
+                total   += label.size(0)
+                tp += ((predicted == 1) & (label == 1)).sum().item()
+                fp += ((predicted == 1) & (label == 0)).sum().item()
+                tn += ((predicted == 0) & (label == 0)).sum().item()
+                fn += ((predicted == 0) & (label == 1)).sum().item()
+        tpr_itw = tp / (tp + fn) if (tp + fn) > 0 else 0
+        tnr_itw = tn / (tn + fp) if (tn + fp) > 0 else 0
+        fpr_itw = 1 - tnr_itw
+        fnr_itw = 1 - tpr_itw
+        eer_itw = (fpr_itw + fnr_itw) / 2
+        print(f"  ITW accuracy: {correct/total:.4f}  ({correct}/{total})")
+        print(f"  TPR (bonafide): {tpr_itw:.4f}")
+        print(f"  TNR (spoof):    {tnr_itw:.4f}")
+        print(f"  EER (approx):   {eer_itw*100:.1f}%  (baseline: 38.6% ASVspoof-only)")

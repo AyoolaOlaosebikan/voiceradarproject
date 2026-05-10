@@ -23,14 +23,14 @@ from transformers import HubertModel, AutoFeatureExtractor
 DATASET_DIR = Path("/Users/ayoola/Downloads/release_in_the_wild")
 META_FILE   = DATASET_DIR / "meta.csv"
 EMB_DIR     = Path("embeddings/itw")
-MAX_SAMPLES = 10000  # 5000 bonafide + 5000 spoof
+MAX_SAMPLES = 6000   # 3000 bonafide + 3000 spoof
 RANDOM_SEED = 42
 
 # ---------------------------------------------------------------------------
 # Model
 # ---------------------------------------------------------------------------
 
-DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cpu"  # MPS causes OOM on 8GB M2 over long runs; CPU is slower but stable
 print(f"Device: {DEVICE}")
 
 extractor = AutoFeatureExtractor.from_pretrained("facebook/hubert-base-ls960")
@@ -101,6 +101,8 @@ for i, (fname, label) in enumerate(samples):
     if (i + 1) % 100 == 0:
         print(f"  {i+1}/{len(samples)}  processed={processed}  "
               f"skipped={skipped}  errors={errors}", flush=True)
+        if DEVICE == "mps":
+            torch.mps.empty_cache()
 
 print(f"\nDone. processed={processed}  skipped={skipped}  errors={errors}")
 

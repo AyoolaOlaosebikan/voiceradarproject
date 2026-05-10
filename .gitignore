@@ -26,3 +26,7 @@ notes/
 
 # macOS
 .DS_Store
+
+# Secrets
+.env
+!.env.example

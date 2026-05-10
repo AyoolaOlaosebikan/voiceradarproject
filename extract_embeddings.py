@@ -44,7 +44,7 @@ MAX_PER_SPLIT = {"train": 10000, "dev": 2000, "eval": 3000}
 
 MODEL_NAME = "facebook/hubert-base-ls960"
 
-device = "mps" if torch.backends.mps.is_available() else "cpu"
+device = "cpu"  # MPS causes OOM on 8GB M2 over long runs; CPU is slower but stable
 print(f"Device: {device}")
 
 extractor = AutoFeatureExtractor.from_pretrained(MODEL_NAME)
@@ -130,6 +130,8 @@ for split in ("train", "dev", "eval"):
 
         if (i + 1) % 100 == 0:
             print(f"  {i+1}/{len(entries)}  processed={processed}  skipped={skipped}  errors={errors}")
+            if device == "mps":
+                torch.mps.empty_cache()
 
     print(f"  Done. processed={processed}  skipped={skipped}  errors={errors}")
 
